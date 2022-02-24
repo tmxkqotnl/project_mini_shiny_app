@@ -5,3 +5,6 @@
 # 데이터 출처
 - drink_sales.csv
     - https://www.index.go.kr/potal/main/EachDtlPageDetail.do?idx_cd=2824
+- from Kaggle
+    - house_prices
+    - titanic
