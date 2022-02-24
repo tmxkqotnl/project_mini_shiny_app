@@ -1,0 +1,506 @@
+---
+title: "6조 2번 과제 - House Prices Prediction Dataset"
+output: html_notebook
+---
+
+reference
+https://www.kaggle.com/maestroyi/house-prices-prediction-with-r-to-korean
+
+# 패키지설치
+```{r}
+install.packages("ggplot2")
+install.packages("knitr")
+install.packages("plyr")
+install.packages("dplyr")
+install.packages("corrplot")
+install.packages("caret")
+install.packages("gridExtra")
+install.packages("scales")
+install.packages("Rmisc")
+install.packages("ggrepel")
+library(ggplot2)
+library(knitr)
+library(plyr)
+library(dplyr)
+library(corrplot)
+library(caret)
+library(gridExtra)
+library(scales)
+library(Rmisc)
+library(ggrepel)
+
+train <- read.csv("train.csv") #파일불러오기
+test <- read.csv("test.csv")
+```
+
+# 행의수, 열의수 확인
+```{r}
+dim(train)
+```
+# 컬럼명 확인
+```{r}
+str(train)
+```
+
+# 후에 submission을 위해 test의 id는 벡터에 두고, 변수는 삭제한다.
+```{r}
+test_labels <- test$Id  
+test$Id <- NULL
+train$Id <- NULL
+```
+
+# 컬럼별 결측치 수 확인
+```{r}
+colSums(is.na(all))
+```
+
+# rbind 사전 작업으로 변수 개수 맞추기 위해 SalePrice 변수 생성
+```{r}
+test$SalePrice <- NA     
+all <- rbind(train, test)
+dim(all)
+```
+id변수제외하고 79개의 독립변수와 1개의 종속변수가 있음.
+
+차트를 보면 오른쪽으로 치우친 분포임. 이건 소수의 사람이 고가의 집에 영향을 끼치는 것으로 보임.
+
+rbind 과정중 all에는 test의 SalePrice를 전부 NA로 넣었다. 그래서 is.na로 결측치 제외한 데이터를 로드하고 x축의 scale을 적용해서 차트를 만들었다.
+
+#SalePrice 분포
+```{r}
+ggplot(data = all[!is.na(all$SalePrice),], 
+       aes(x = SalePrice)) +
+  geom_histogram(fill = 'blue', binwidth = 10000) +
+  scale_x_continuous(breaks = 
+                       seq(0, 800000, by = 100000),                           labels = comma) 
+#0~80만까지 10만 단위로 x축 표현(구분자 ,)
+```
+
+# 요약값 확인
+```{r}
+summary(train$SalePrice) 
+```
+75%까지의 분포가 21만대 안에서 이뤄지며, 평균은 18만, 중위값은 16만이다. 
+
+
+SalePrice와 양의 상관 관계를 가진 10개의 numeric 변수를 선정한다.(상관 계수 0.5 이상)
+```{r}
+# index 벡터 numeric 변수 저장
+numericVars <- which(sapply(all, is.numeric)) 
+#이름 명명하여 변수 생성
+numericVarNames <- names(numericVars) 
+#개수 출력
+cat('There are', length(numericVars), 'numeric variables')
+```
+
+```{r}
+# 모든 numeric 변수의 상관 계수
+all_numVar <- all[, numericVars]
+cor_numVar <- cor(all_numVar, 
+                  use='pairwise.complete.obs') 
+```
+```{r}
+# SalePrice와의 상관 계수 내림차순으로 정렬
+cor_sorted <- as.matrix(sort(cor_numVar[, 'SalePrice'],                                           decreasing = TRUE))
+# 상관 계수가 큰 변수만을 선택 (0.5이상)
+CorHigh <- names(which(apply(cor_sorted, 1, 
+                             function(x) abs(x) > 0.5)))
+cor_numVar <- cor_numVar[CorHigh, CorHigh]
+
+```
+
+#correlation plot 그리기
+```{r}
+corrplot.mixed(cor_numVar, 
+               tl.col = 'black',   # 변수명 색깔
+               tl.pos = 'lt',      # 변수명 왼쪽 표시
+               number.cex = .7)    # matrix안 상관계수 text 크기
+```
+이 중에서 상관 관계가 가장 높은 2개 독립 변수 
+‘OverallQual’, ‘GrLivArea’를 시각화하겠다. 
+(’GrLivArea’는 지하실 제외한 지상의 면적이다.
+‘OverallQual’는 집의 전반적인 완성도(1~10)를 의미함) 
+
+다중공선성을 clear하게 하는 것 또한 한가지 이슈이다. 
+예를 들어, ’GarageCars’ 와 ‘GarageArea’의 상관 계수는 매우 높은 0.89이며 이 수치는 ’SalePrice’와도 유사하게 높다. 
+
+SalePrice와 0.5 이상의 상관 계수를 가진 변수들은 이렇다. ’TotalBsmtSF’ - ‘1stFlrSF’ - ‘FullBath’ - ‘TotRmsAbvGrd’ - ‘YearBuilt’ - ‘YearRemodAdd’.
+
+numeric 변수중 SalePrice와 상관 계수가 가장 큰(0.79) 변수이며, 집의 전반적인 재료와 마감의 평가로 수치는 1(아주 낮은) ~ 10(아주 높은)까지이다
+
+
+# boxplot (‘OverallQual’-’SalePrice’)
+```{r}
+ggplot(data = all[!is.na(all$SalePrice),], 
+       aes(x = factor(OverallQual), y = SalePrice)) +
+  geom_boxplot(col = 'blue') + labs(x = 'Overall Quality') +
+  scale_y_continuous(breaks = seq(0, 800000, by = 100000))
+```
+SalePrice와 Overall Quality간은 양의 상관 관계를 보이며, 전반적으로 상향 곡선의 형태이다. 이상치는 특출난 값은 보이지 않는다. 후에 아웃라이어의 후보가 있다면, 4 등급의 비싼 집일 것이다.
+
+#scatter plot ('GrlvArea'-'SalesPrice')
+```{r}
+ggplot(data = all[!is.na(all$SalePrice),], 
+       aes(x = GrLivArea, y = SalePrice)) +
+       geom_point(col = 'blue') + 
+       geom_smooth(method = 'lm', se = FALSE, 
+                   color = 'black', aes(group = 1)) +
+        scale_y_continuous(breaks = seq(0, 800000, by = 1000000), 
+                           ) +
+        geom_text_repel(aes(label =                
+                      ifelse(all$GrLivArea[!is.na(all$SalePrice)] >4500,
+                             rownames(all), '')))
+#price 4500이상 텍스트 표기
+```
+numeric 변수중 SalePrice와 상관 계수가 두 번째로 큰 변수(0.71)이며, 많은 관측치가 있지만 큰 집은 일반적으로 비싸다.
+면적 대비 가격이 낮은 두 개의 이상치 같은 것이 보인다.(524, 1299번). 위험할 수 있기에 이것을 아웃라이어로 배제하는건 아직 안하겠다. 예를 들어 Overall Quality의 낮은 등급은 낮은 가격을 설명하지만, 보이는 바와 같이 2채의 집은 실제적으로 최고 등급의 집이다. 따라서 1299, 524 두 채의 집은 일단 이상치 후보로 두기로 한다.
+
+# 결측치가 포함된 독립변수 34개 수정하기
+# 결측치 포함된 변수 확인
+다른 변수와 유의미한 관계를 갖는 변수를 찾는다면, 그룹핑 하기
+결측치는 character 타입은 integer 타입으로 변환했고, 순서형 변수나 순서가 없는 범주형은 factor로 변환했다. ‘one-hot-encoding’(model.matrix 함수)을 써서 factor를 numeric으로 변환할 것이다.
+```{r}
+# 모든 결측치 변수 생성
+NAcol <- which(colSums(is.na(all)) > 0)  
+#결측치 변수 별로 내림차순 정렬
+sort(colSums(sapply(all[NAcol], is.na)), decreasing = TRUE) 
+```
+```{r}
+cat('There are', length(NAcol), 'columns with missing values')
+```
+'SalePrice'제외하고 34개의 독립 변수에서 NA를 수정해야함.
+```{r}
+#PoolQC
+all$PoolQC[is.na(all$PoolQC)] <- 'None'  #결측치에 none채우기
+Qualities <- c('None' = 0, 'Po' = 1, 'Fa' = 2, 'TA' = 3, 'Gd' = 4, 'Ex' = 5)
+all$PoolQC <- as.integer(revalue(all$PoolQC, Qualities))#순서형 변환
+table(all$PoolQC)
+#PoolQC와 비슷한 PoolArea 처리
+all[all$PoolArea > 0 & all$PoolQC == 0, c('PoolArea', 'PoolQC', 'OverallQual')]
+all$PoolQC[2421] <- 2
+all$PoolQC[2504] <- 3
+all$PoolQC[2600] <- 2
+```
+
+```{r}
+#Miscellanuous feature 
+all$MiscFeature[is.na(all$MiscFeature)] <- 'None'  #결측치 'None' 치환
+all$MiscFeature <- as.factor(all$MiscFeature) #factor변환
+
+ggplot(all[!is.na(all$SalePrice),], aes(x = MiscFeature, y = SalePrice)) +
+  geom_bar(stat = 'summary', fun.y = 'median', fill = 'blue') +
+  scale_y_continuous(breaks = seq(0, 800000, by = 100000), labels = comma) +
+  geom_label(stat = 'count', aes(label = ..count.., y = ..count..)) #막대 그래프 count 라벨링
+```
+
+```{r}
+table(all$MiscFeature)
+```
+빈도를 볼 때, 그 변수는 무의미해 보인다. 헛간이 있는 낮은 가격은 ’no Garage’일 것이라 추측한다. 테니스 코트가 있는 집은 비싸고, 단 한 곳 뿐이었다.
+
+
+```{r}
+#alley
+all$Alley[is.na(all$Alley)] <- 'None'
+all$Alley <- as.factor(all$Alley)
+ggplot(all[!is.na(all$SalePrice),], aes(x = Alley, y = SalePrice)) + 
+  geom_bar(stat = 'summary', fun.y = 'median', fill = 'blue') +
+  scale_y_continuous(breaks = seq(0, 200000, by = 50000), labels = comma)
+
+```
+
+```{r}
+table(all$Alley)
+```
+```{r}
+#Fence
+all$Fence[is.na(all$Fence)] <- 'None'
+table(all$Fence)
+
+```
+```{r}
+all[!is.na(all$SalePrice),] %>% 
+  group_by(Fence) %>%  #Fence 그룹핑
+  summarise(median = median(SalePrice), counts = n()) #Fence변수의 price 중위값, 개수 확인
+all$Fence <- as.factor(all$Fence)  #Fence가 순서형 변수가 아니어서 factor 타입으로 변환
+```
+
+```{r}
+#Fireplace quality
+all$FireplaceQu[is.na(all$FireplaceQu)] <- 'None'
+all$FireplaceQu <- as.integer(revalue(all$FireplaceQu, Qualities))
+table(all$FireplaceQu)
+table(all$Fireplaces)   #Fireplaces의 범주별 개수 확인
+```
+FireplaceQu 결측치의 수는 fireplaces 변수가 0인 수와 일치한다. 이건 이 결측치를 ’no fireplace’로 바꾸는데 무리가 없다는 걸 말한다. 이건 순서형 범주이고, Pool Quality를 위해 이전에 만들어둔 Qulaites 벡터를 쓰겠다.
+```{r}
+sum(table(all$Fireplaces)) #합산한 개수가 변수의 총 개수와 같은지 확인
+```
+
+```{r}
+# LotFrontage: Linear feet of street connected to property
+ggplot(all[!is.na(all$LotFrontage),], 
+       aes(x = as.factor(Neighborhood), y = LotFrontage)) +
+       geom_bar(stat = 'summary', fun.y = 'median', fill = 'blue') + 
+       theme(axis.text.x = element_text(angle = 45, hjust = 1)) # Text 45도 기울기, 높이는 1로 설정
+```
+
+```{r}
+#상기 확인된 결측치를 반복문을 돌려 모두 대체하겠다.
+for (i in 1:nrow(all)) {
+        if(is.na(all$LotFrontage[i])){
+          all$LotFrontage[i] <- as.integer(median(all$LotFrontage[all$Neighborhood==all$Neighborhood[i]],
+                                                  na.rm = TRUE))
+        }
+}
+```
+
+```{r}
+#LotShape: General shape of property 
+all$LotShape <- as.integer(revalue(all$LotShape, c('IR3' = 0, 'IR2' = 1, 'IR1' = 2, 'Reg' = 3)))
+table(all$LotShape)
+```
+```{r}
+sum(table(all$LotShape))
+```
+```{r}
+# LotConfig: Lot configuration
+ggplot(all[!is.na(all$SalePrice),], aes(x = as.factor(LotConfig), y = SalePrice)) +
+  geom_bar(stat = 'summary', fun.y = 'median', fill = 'blue') +
+  scale_y_continuous(breaks = seq(0, 800000, by = 100000), labels = comma) +
+  geom_label(stat = 'count', aes(label = ..count.., y = ..count..))
+```
+```{r}
+all$LotConfig <- as.factor(all$LotConfig)
+table(all$LotConfig)
+```
+```{r}
+sum(table(all$LotConfig))
+```
+```{r}
+all$GarageYrBlt[is.na(all$GarageYrBlt)] <- all$YearBuilt[is.na(all$GarageYrBlt)]
+```
+결측치의 개수는 2개 변수(GarageCars, GarageArea)가 1개, 1개 변수(GarageType)가 157개, 나머지 4개 변수가 159개이다. 먼저 159개의 결측치가 있는 ** GarageYrBlt:창고 건축년도 ** 의 결측치 값을 YearBuilt의 값으로 대체하겠다. (리모델링이나 증축을 하지 않은 YearBuilt의 default값이 YearReomdAdd 변수와 유사하다.)
+결측치는 문자형 타입이며 ’no garage’를 의미하기에, 157개와 159개의 결측치를 가진 세 변수의 차이점을 찾아보겠다.
+```{r}
+#157개의 결측치가 159개 결측치의 변수와 동일한 관측치인지 확인해 보겠다.
+length(which(is.na(all$GarageType) & is.na(all$GarageFinish) & is.na(all$GarageCond) & is.na(all$GarageQual)))
+```
+
+```{r}
+#나머지 2개의 관측치를 찾아보겠다.
+kable(all[!is.na(all$GarageType) & is.na(all$GarageFinish), 
+          c('GarageCars', 'GarageArea', 'GarageType', 'GarageCond', 'GarageQual', 'GarageFinish')])
+```
+GarageType’의 157개 결측치는 ’GarageCondition’, ‘GarageQuality’, ’GarageFinish’에 있는 결측치를 나타낸다. 2127과 2577 두채의 다른 집을 찾았다. 2127은 창고가 있지만, 2577은 없는 것처럼 보인다. 즉 총 158개의 집이 창고가 없으며, 2127의 결측치는 159개 세 변수의 가장 많은 값으로 대체하겠다.
+```{r}
+# 최빈도 값으로 결측치 대체
+all$GarageCond[2127] <- names(sort(-table(all$GarageCond)))[1]
+all$GarageQual[2127] <- names(sort(-table(all$GarageQual)))[1]
+all$GarageFinish[2127] <- names(sort(-table(all$GarageFinish)))[1]
+
+# 대체 후 값 확인
+kable(all[2127, c('GarageYrBlt', 'GarageCars', 'GarageArea', 'GarageType', 'GarageCond', 'GarageQual', 'GarageFinish')])
+```
+상기 두 변수 다 1개의 결측치가 있으며, 그건 2577 house이다. 이건 지금껏의 관측에서 찾아봤듯이 모든 Garage 변수에서 2577은 ’no Garage’를 나타낸다.
+```{r}
+# 2577 house에 값을 할당
+all$GarageCars[2577] <- 0
+all$GarageArea[2577] <- 0
+all$GarageType[2577] <- NA
+
+# 문자형 변수인 4 변수의 결측치가 모두 158개인지 확인해보겠다.
+length(which(is.na(all$GarageType) & is.na(all$GarageFinish) & is.na(all$GarageCond) & is.na(all$GarageQual)))
+```
+4개의 문자형 변수는 Garage와 연관이 있으며 모든 셋에 158개의 동일한 결측치가 있고, 이건 “No Garage”를 의미한다. 이 섹션에서 이걸 수정했다.
+```{r}
+#GarageType
+all$GarageType[is.na(all$GarageType)] <- 'No Garage'
+all$GarageType <- as.factor(all$GarageType)
+table(all$GarageType)
+```
+
+```{r}
+# GarageFinish: Garage 인테리어 완료
+all$GarageFinish[is.na(all$GarageFinish)] <- 'None'
+Finish <- c('None' = 0, 'Unf' = 1, 'RFn' = 2, 'Fin' = 3) #문자형 수치형으로 변환
+all$GarageFinish <- as.integer(revalue(all$GarageFinish, Finish))
+table(all$GarageFinish)
+```
+
+```{r}
+# GarageQual: Garage Quality 
+all$GarageQual[is.na(all$GarageQual)] <- 'None'
+all$GarageQual <- as.integer(revalue(all$GarageQual, Qualities))
+table(all$GarageQual)
+```
+
+```{r}
+# GarageCond: Garage condition
+all$GarageCond[is.na(all$GarageCond)] <- 'None'
+all$GarageCond <- as.integer(revalue(all$GarageCond, Qualities))
+table(all$GarageCond)
+```
+
+```{r}
+# 79개의 결측치가 80 이상의 결측치의 값과 동일한 관측치를 보이는지 확인하겠다.
+length(which(is.na(all$BsmtQual) & is.na(all$BsmtCond) & is.na(all$BsmtExposure) & 
+               is.na(all$BsmtFinType1) & is.na(all$BsmtFinType2)))
+
+```
+
+```{r}
+# 추가 결측치 찾기: BsmtFinType1은 결측치가 아니지만, 다른 4개 변수들이 결측치인 경우
+all[!is.na(all$BsmtFinType1) & (is.na(all$BsmtCond) | is.na(all$BsmtQual) | is.na(all$BsmtExposure) | is.na(all$BsmtFinType2)), 
+    c('BsmtQual', 'BsmtCond', 'BsmtExposure', 'BsmtFinType1', 'BsmtFinType2')]
+```
+확인 결과, 79채가 지하실이 없는 것처럼 보인다. 그 중 9채는 중간 중간 결측치가 보이는데, 이건 각 변수를 내림차순으로 정렬해 가장 빈도수가 높은 값으로 대체하겠다.
+```{r}
+# 최빈도값으로 대체값 할당
+all$BsmtFinType2[333] <- names(sort(-table(all$BsmtFinType2)))[1]
+all$BsmtExposure[c(949, 1488, 2349)] <- names(sort(-table(all$BsmtExposure)))[1]
+all$BsmtQual[c(2218,2219)] <- names(sort(-table(all$BsmtQual)))[1]
+all$BsmtCond[c(2041, 2186, 2525)] <- names(sort(-table(all$BsmtCond)))[1]
+```
+79~82개의 결측치를 가진 5개 변수는 지하실이 없어 보여, factorize/ hot encode하겠다.
+```{r}
+all$BsmtQual[is.na(all$BsmtQual)] <- 'None'
+all$BsmtQual <- as.integer(revalue(all$BsmtQual, Qualities))
+table(all$BsmtQual)
+```
+```{r}
+# BsmtCond: 지하실의 일반적인 상태로 본 등급
+all$BsmtCond[is.na(all$BsmtCond)] <- 'None'
+all$BsmtCond <- as.integer(revalue(all$BsmtCond, Qualities))
+table(all$BsmtCond)
+```
+```{r}
+#BsmtExposure: 벽이나 정원의 도보 적합도 수준
+all$BsmtExposure[is.na(all$BsmtExposure)] <- 'None'
+Exposure <- c('None' = 0, 'No' = 1, 'Mn' = 2, 'Av' = 3, 'Gd' = 4)
+
+all$BsmtExposure <- as.integer(revalue(all$BsmtExposure, Exposure))
+table(all$BsmtExposure)
+```
+```{r}
+# BsmtFinType1: 지하실 완공 면적의 등급
+all$BsmtFinType1[is.na(all$BsmtFinType1)] <- 'None'
+Fintype <- c('None' = 0, 'Unf' = 1, 'LwQ' = 2, 'Rec' = 3, 'BLQ' = 4, 'ALQ' = 5, 'GLQ' = 6)
+
+all$BsmtFinType1 <- as.integer(revalue(all$BsmtFinType1, Fintype))
+table(all$BsmtFinType1)
+```
+```{r}
+# BsmtFinType2: multiple type일 경우의 지하실 완공 면적 등급
+all$BsmtFinType2[is.na(all$BsmtFinType2)] <- 'None'
+all$BsmtFinType2 <- as.integer(revalue(all$BsmtFinType2, Fintype))
+table(all$BsmtFinType2)
+```
+```{r}
+# 상기에 관측했던 지하실이 없었던 79채를 참고하여 남은 결측치를 확인해보자
+all[(is.na(all$BsmtFullBath) | is.na(all$BsmtHalfBath) | is.na(all$BsmtFinSF1) | 
+       is.na(all$BsmtFinSF2) | is.na(all$BsmtUnfSF) | is.na(all$TotalBsmtSF)), 
+    c('BsmtQual', 'BsmtFullBath', 'BsmtHalfBath', 'BsmtFinSF1', 'BsmtFinSF2', 'BsmtUnfSF', 'TotalBsmtSF')]
+```
+확인 결과 2채의 집에 결측치를 발견했고, 결측치는 0으로 대체하겠다.
+```{r}
+#BsmtFullBath: full bathrooms을 갖춘 지하실
+all$BsmtFullBath[is.na(all$BsmtFullBath)] <- 0
+table(all$BsmtFullBath)
+```
+```{r}
+#BsmtHalfBath: half bathrooms을 갖춘 지하실
+all$BsmtHalfBath[is.na(all$BsmtHalfBath)] <- 0
+table(all$BsmtHalfBath)
+```
+```{r}
+# 나머지 변수 전처리
+all$BsmtFinSF1[is.na(all$BsmtFinSF1)] <- 0
+all$BsmtFinSF2[is.na(all$BsmtFinSF2)] <- 0
+all$BsmtUnfSF[is.na(all$BsmtUnfSF)] <- 0
+all$TotalBsmtSF[is.na(all$TotalBsmtSF)] <- 0
+```
+
+
+```{r}
+# 
+install.packages("car")
+library(car)
+scatterplotMatrix(cor_numVar, pch=19, col="royalblue", cex=1.2,regLine=list(method=lm, lty=1, lwd=3, col="salmon"),smooth=list(smoother=loessLine, spread=FALSE, lty.smooth=1, lwd.smooth=3, col.smooth="forestgreen"),
+main="sales Price")
+```
+변수별 분포와 선형 관계를 살펴 보았음.
+
+```{r}
+# 주성분분석
+cor_numVar.m <- cor_numVar[2:11,2:11]
+cor_numVar.m.pca <- prcomp(cor_numVar.m, scale. =T)  #단위가 다르므로 표준화
+summary(cor_numVar.m.pca)
+
+```
+주성분분석을 시행했을때 주성분3개까지 사용시 종속변수를 81.6%까지 설명할 수있다는 결과가 나옴.
+또한 주성분3개까지 표준편차(Standard deviation)의 제곱의 수치가 1이상임.
+
+```{r}
+screeplot(cor_numVar.m.pca, type="lines", pch=1, main="scree plot")
+```
+스크리그림을 그렸을때도 4이후 완만해져서 주성분을 3개까지 쓰는게 좋아보임.
+```{r}
+cor_numVar.m.pca$x[,1:2]
+```
+주성분 상위 3개가 'OverallQual ', 'GrLivArea', 'GarageCars '이므로 세 변수를 이용해서 선형회귀 분석함.
+```{r}
+# 다중선형회귀분석
+lm <- lm(SalePrice ~ OverallQual + GrLivArea + GarageCars, data=all)
+summary(lm)
+```
+SalePrice ~ OverallQual + GrLivArea + GarageCars 모델의
+모든 독립변수는 p값이 매우 작으므로 모두 유의하다고 볼 수 있음. 이 모형의 설명력은 73.85%이며, 모델의 p값도 매우 작으므로 모델이 유의하다고 볼 수있음.
+
+```{r}
+install.packages('QuantPsyc')
+library(QuantPsyc)
+lm.beta(lm)
+```
+표준화계수 베타를 확인 해보았을때도 주성분분석을 했을때와 유사한 결과가 나왔음.
+
+
+
+```{r}
+#페널티 회귀분석(릿지)
+install.packages('glmnet')
+library('glmnet')
+set.seed(123)
+
+x <- all_numVar[,1:36]
+x <- as.matrix(x)  #매트릭스로 변환
+y <- all_numVar[,37]
+y[is.na(y)] <- mean(y, na.rm=T) #y결측치 처리
+
+cor_numVar.cv <- cv.glmnet(x=x, y=y, family="gaussian", alpha=0)
+```
+변수가 많아서  릿지 선택함-> 높은 분산을 가지는 상황에서 가장 잘 작동하기 때문, 분산은 크게 감소할 것임.
+x는 숫자형 변수들, y는 SalesPrice로 릿지회귀모형을 만듦.
+영향을 거의 미치지 않는 변수에 대하여 0에 가까운 가중치를 줌.
+```{r}
+plot(cor_numVar.cv)
+```
+최적의 람다값(MSE를 최소화하는 람다값)이 클수록 정규화가 많이 된 것인데 로그값이 8에 가까우므로 정규화가 많이 되었음
+
+
+```{r}
+best.lam <- cor_numVar.cv$lambda.min
+log(best.lam)
+```
+최적의 람다는 4073.289
+```{r}
+out=glmnet(x,y,alpha=0)
+a <- as.matrix(predict(out,type="coefficients",s=best.lam)[1:37,])
+a <- sort(a)
+```
+여기서 회귀계수가 -에 가까운 것은 영향을 거의 미치지 않으므로 변수들을 제거하면 됨．
+ OverallQual  TotRmsAbvGrd 두가지 제외하고 제거함.
+
+
+
+
