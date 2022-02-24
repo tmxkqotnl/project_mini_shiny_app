@@ -3,10 +3,14 @@ library(ggplot2)
 library(magrittr) #%>% 쓰기위해서~
 library(dplyr) # group_by 쓰기 위해서~
 library(gapminder)
-df2 <- read.csv("drink_tax.csv", header= TRUE, sep= ",", quote="\"",
+
+df2 <- read.csv("../data/drink_tax.csv", header= TRUE, sep= ",", quote="\"",
                 dec = ".", fill = TRUE, comment.char= "")
-df3 <- read.csv("covid.csv", header= TRUE, sep= ",", quote="\"",
+test = read.csv('../data/df_al.csv')
+
+df3 <- read.csv("../data/covid.csv", header= TRUE, sep= ",", quote="\"",
                 dec = ".", fill = TRUE, comment.char= "")
+
 df2_t <- df2 %>% group_by(date) %>% summarise(출고량 = sum(출고량))
 df2_a <- df2 %>% group_by(date,location,type) %>% summarise(출고량 =sum(출고량))
 df2_at <- df2_a %>% group_by(date,type) %>% summarise(출고량 =sum(출고량))
