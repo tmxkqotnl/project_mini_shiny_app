@@ -29,8 +29,9 @@ library(scales)
 library(Rmisc)
 library(ggrepel)
 
-train <- read.csv("train.csv") #파일불러오기
-test <- read.csv("test.csv")
+getwd()
+train <- read.csv("../data/house_prices/train.csv") #파일불러오기
+test <- read.csv("../data/house_prices/test.csv")
 ```
 
 # 행의수, 열의수 확인

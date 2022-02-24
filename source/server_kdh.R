@@ -58,4 +58,6 @@ server <- function(input, output, session) {
       labs(x = "연도", y = "판매량(kL)",
            title = "연도별 주류 판매량")
   })
+  
+  
 }

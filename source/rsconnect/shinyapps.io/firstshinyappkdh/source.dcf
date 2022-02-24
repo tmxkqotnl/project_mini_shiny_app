@@ -1,0 +1,11 @@
+name: source
+title:
+username:
+account: firstshinyappkdh
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 5723493
+bundleId: 5612492
+url: https://firstshinyappkdh.shinyapps.io/source/
+when: 1645680392.44254
+lastSyncTime: 1645680392.44254
