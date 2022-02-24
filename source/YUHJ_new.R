@@ -3,7 +3,7 @@ library(shiny)
 library(ggplot2)
 library(gapminder)
 
-pd <- read.csv(file = 'C:/Users/wpghf/sta/source/adfee.csv')
+pd <- read.csv(file = '../data/adfee.csv')
 
 str(pd)
 

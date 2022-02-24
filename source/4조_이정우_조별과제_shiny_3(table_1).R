@@ -3,9 +3,7 @@ library(shiny)
 library(ggplot2)
 library(gapminder)
 
-#pd <- read.csv(file = 'C:/Users/wpghf/sta/source/adfee.csv')
-
-#str(pd)
+df_al = read_csv('../data/daegu_alcohol_consume.csv')
 
 ui <- basicPage(titlePanel('대구광역시 연도별 주류 소비량'),
                 

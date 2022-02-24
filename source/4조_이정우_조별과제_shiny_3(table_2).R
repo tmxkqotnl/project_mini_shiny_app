@@ -3,6 +3,8 @@ library(shiny)
 library(ggplot2)
 library(gapminder)
 
+df_com = read.csv("../data/daegu_commuter.csv", header=T, encoding ="utf-8")
+
 ui <- basicPage(titlePanel('대구 상가 밀집 주요 역 연도별 하차 인원수'),
                 
                 mainPanel(
@@ -12,8 +14,6 @@ ui <- basicPage(titlePanel('대구 상가 밀집 주요 역 연도별 하차 인
 
 server <- function (input, output) {
   output$graph_2 <- renderPlot({
-    
-   
     ggplot(data = df_com, aes(x = year, y = commuter, group_by=station,
                               color=station)) +
       geom_line(size=1.2)+
