@@ -5,7 +5,9 @@ library(tidyverse)
 library(ggplot2)
 library(patchwork)
 
-df = read_csv(paste(getwd(), "mini/data/drink_sales.csv",
+# chagnge Working directory to run source
+setwd(paste(getwd(),'../',sep = "/"))
+df = read_csv(paste(getwd(), "data/drink_sales.csv",
                     sep = "/"))
 
 str(df)
