@@ -1,18 +1,20 @@
-# install.packages(c('shiny','tidyverse','ggplot2','patchwork'))
+# install.packages(c('shiny','tidyverse','ggplot2','patchwork','rsconnect'))
+
+#rsconnect::setAccountInfo(name='mini',
+#                          token='6BD2CF4CDF5CC991191090AC41D3437C',
+#                          secret='<>')
+
+
+# server and ui 가 완료되면 배포용 코드 외 삭제
 
 library(shiny)
 library(tidyverse)
 library(ggplot2)
 library(patchwork)
+library(rsconnect)
 
-# chagnge Working directory to run source
-setwd(paste(getwd(),'../',sep = "/"))
-df = read_csv(paste(getwd(), "data/drink_sales.csv",
-                    sep = "/"))
-
-str(df)
-colSums(is.na(df))
-cols = names(df)
+df = read_csv(paste(getwd(),"../data/drink_sales.csv",sep='/')) # for execute runApp()
+# df = read_csv(paste(getwd(),"data/drink_sales.csv",sep='/')) # error when runApp.. why?
 
 make_comp = function(x) {
   comp = c(1)
@@ -74,3 +76,5 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui = ui, server = server)
+
+# rsconnect::deployApp()
